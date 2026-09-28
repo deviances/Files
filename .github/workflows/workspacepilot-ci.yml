@@ -6,6 +6,10 @@ on:
       - workspacepilot-v0.1
   workflow_dispatch:
 
+concurrency:
+  group: workspacepilot-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   SOLUTION_NAME: 'Files.slnx'
   CONFIGURATION: 'Release'
@@ -209,7 +213,7 @@ jobs:
           '@ | Set-Content -Path (Join-Path $env:ARTIFACT_DIR "COLLECT_LOGS.cmd") -Encoding ASCII
 
           @'
-          WorkspacePilot V0.1.1 TEST
+          WorkspacePilot V0.2.0 TEST
           ==========================
 
           Build produite avec le pipeline sideload officiel de Files :
@@ -235,7 +239,7 @@ jobs:
       - name: Upload WorkspacePilot package
         uses: actions/upload-artifact@v7
         with:
-          name: WorkspacePilot-V0.1.1-x64
+          name: WorkspacePilot-V0.2.0-x64
           path: ${{ env.ARTIFACT_DIR }}
           if-no-files-found: error
           retention-days: 30
