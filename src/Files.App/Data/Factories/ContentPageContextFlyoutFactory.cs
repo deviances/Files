@@ -545,13 +545,13 @@ namespace Files.App.Data.Factories
 					IsVisible = ModifiableCommands.OpenProperties.IsExecutable
 				}.Build(),
 				new ContextMenuFlyoutItemViewModelBuilder(Commands.OpenParentFolder).Build(),
-				new ContextMenuFlyoutItemViewModelBuilder(Commands.PinFolderToSidebar)
+				new ContextMenuFlyoutItemViewModelBuilder(Commands.PinToWorkspace)
 				{
-					IsVisible = Commands.PinFolderToSidebar.IsExecutable && UserSettingsService.GeneralSettingsService.ShowPinnedSection && UserSettingsService.GeneralSettingsService.ShowPinToSideBar,
+					IsVisible = Commands.PinToWorkspace.IsExecutable,
 				}.Build(),
-				new ContextMenuFlyoutItemViewModelBuilder(Commands.UnpinFolderFromSidebar)
+				new ContextMenuFlyoutItemViewModelBuilder(Commands.UnpinFromWorkspace)
 				{
-					IsVisible = Commands.UnpinFolderFromSidebar.IsExecutable && UserSettingsService.GeneralSettingsService.ShowPinnedSection && UserSettingsService.GeneralSettingsService.ShowPinToSideBar,
+					IsVisible = Commands.UnpinFromWorkspace.IsExecutable,
 				}.Build(),
 				new ContextMenuFlyoutItemViewModelBuilder(Commands.PinToStart)
 				{
