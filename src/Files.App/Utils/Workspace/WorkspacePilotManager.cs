@@ -177,6 +177,21 @@ namespace Files.App.Utils
 			return changed;
 		}
 
+		public static void ReplacePins(IEnumerable<string> paths)
+		{
+			lock (SyncRoot)
+			{
+				var workspace = EnsureActiveWorkspaceUnsafe();
+				workspace.Pins = paths
+					.Where(x => !string.IsNullOrWhiteSpace(x))
+					.Distinct(StringComparer.OrdinalIgnoreCase)
+					.ToList();
+				SaveStoreUnsafe();
+			}
+
+			Changed?.Invoke(null, EventArgs.Empty);
+		}
+
 		public static void SaveActiveSession(IEnumerable<string> serializedTabs, int selectedTabIndex)
 		{
 			lock (SyncRoot)
