@@ -307,6 +307,20 @@
 						BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
 						BorderThickness="1" />
 					<controls:SidebarItem
+						x:Name="WorkspaceManagerButton"
+						AutomationProperties.AutomationId="WorkspaceManagerButton"
+						AutomationProperties.Name="Workspaces"
+						Item="{x:Bind SidebarAdaptiveViewModel.WorkspaceManagerSidebarItem, Mode=OneWay}"
+						Text="{x:Bind SidebarAdaptiveViewModel.WorkspaceManagerSidebarItem.Text, Mode=OneWay}"
+						ToolTip="Gérer les workspaces">
+						<controls:SidebarItem.Icon>
+							<FontIcon
+								Glyph="&#xE8B7;"
+								Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+						</controls:SidebarItem.Icon>
+					</controls:SidebarItem>
+
+					<controls:SidebarItem
 						x:Name="SettingsButton"
 						AccessKey="I"
 						AccessKeyInvoked="SettingsButton_AccessKeyInvoked"
