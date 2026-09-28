@@ -562,7 +562,7 @@ namespace Files.App.ViewModels.UserControls
 				case SectionType.Pinned:
 					if (ShowPinnedFoldersSection == false)
 						break;
-					section = BuildSection(Strings.Pinned.GetLocalizedResource(), sectionType, new ContextMenuOptions { ShowHideSection = true }, false);
+					section = BuildSection("Workspace", sectionType, new ContextMenuOptions { ShowHideSection = true }, false);
 					section.IsHeader = true;
 					break;
 
@@ -927,7 +927,7 @@ namespace Files.App.ViewModels.UserControls
 			if (rightClickedItem is DriveItem drive)
 			{
 				var path = drive.GetRequiredPath();
-				_ = QuickAccessService.PinToSidebarAsync([path]);
+				WorkspacePilotManager.Pin([path]);
 			}
 		}
 
@@ -938,7 +938,7 @@ namespace Files.App.ViewModels.UserControls
 			if (item.Section == SectionType.Pinned || item is DriveItem)
 			{
 				var path = item.GetRequiredPath();
-				_ = QuickAccessService.UnpinFromSidebarAsync(path);
+				WorkspacePilotManager.Unpin([path]);
 			}
 		}
 
