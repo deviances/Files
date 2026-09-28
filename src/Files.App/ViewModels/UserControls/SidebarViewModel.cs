@@ -49,6 +49,7 @@ namespace Files.App.ViewModels.UserControls
 		public object SidebarItems => sidebarItems;
 		public BulkConcurrentObservableCollection<INavigationControlItem> sidebarItems { get; init; }
 		public LocationItem SettingsSidebarItem { get; }
+		public LocationItem WorkspaceManagerSidebarItem { get; }
 		public PinnedFoldersManager SidebarPinnedModel => App.QuickAccessManager.Model;
 		public IQuickAccessService QuickAccessService { get; } = Ioc.Default.GetRequiredService<IQuickAccessService>();
 
@@ -295,6 +296,16 @@ namespace Files.App.ViewModels.UserControls
 		{
 			dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 			fileTagsService = Ioc.Default.GetRequiredService<IFileTagsService>();
+
+			WorkspaceManagerSidebarItem = new LocationItem()
+			{
+				Text = "Workspaces",
+				Path = "WorkspaceManager",
+				Section = SectionType.Home,
+				MenuOptions = new ContextMenuOptions() { IsLocationItem = true },
+				SelectsOnInvoked = true,
+				ChildItems = null
+			};
 
 			SettingsSidebarItem = new LocationItem()
 			{
@@ -826,6 +837,13 @@ namespace Files.App.ViewModels.UserControls
 		public async void HandleItemInvokedAsync(object item, PointerUpdateKind pointerUpdateKind)
 		{
 			if (item is not INavigationControlItem navigationControlItem) return;
+
+			if (string.Equals(navigationControlItem.Path, "WorkspaceManager", StringComparison.OrdinalIgnoreCase))
+			{
+				await ShowWorkspaceManagerAsync();
+				return;
+			}
+
 			var navigationPath = item as string;
 
 			if (await DriveHelpers.CheckEmptyDrive(navigationPath))
@@ -904,6 +922,175 @@ namespace Files.App.ViewModels.UserControls
 
 			if (PaneHolder?.ActivePane is IShellPage shellPage)
 				shellPage.NavigateToPath(navigationPath, sourcePageType);
+		}
+
+		private async Task ShowWorkspaceManagerAsync()
+		{
+			var activeText = new TextBlock
+			{
+				FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+				Margin = new Thickness(0, 0, 0, 4)
+			};
+
+			var workspaceList = new ListView
+			{
+				SelectionMode = ListViewSelectionMode.Single,
+				DisplayMemberPath = nameof(WorkspacePilotWorkspace.Name),
+				MinHeight = 180,
+				MaxHeight = 280
+			};
+
+			var nameBox = new TextBox
+			{
+				Header = "Nom",
+				PlaceholderText = "Ex. TradingStrategy, Bulenox, Apps Perso"
+			};
+
+			var statusText = new TextBlock
+			{
+				TextWrapping = TextWrapping.Wrap,
+				Opacity = 0.75
+			};
+
+			var openButton = new Button { Content = "Ouvrir" };
+			var newButton = new Button { Content = "+ Nouveau" };
+			var renameButton = new Button { Content = "Renommer" };
+			var deleteButton = new Button { Content = "Supprimer" };
+
+			var buttons = new StackPanel
+			{
+				Orientation = Orientation.Horizontal,
+				Spacing = 8
+			};
+			buttons.Children.Add(openButton);
+			buttons.Children.Add(newButton);
+			buttons.Children.Add(renameButton);
+			buttons.Children.Add(deleteButton);
+
+			var content = new StackPanel { Spacing = 10 };
+			content.Children.Add(activeText);
+			content.Children.Add(workspaceList);
+			content.Children.Add(nameBox);
+			content.Children.Add(buttons);
+			content.Children.Add(statusText);
+
+			var dialog = new ContentDialog
+			{
+				Title = "Workspaces",
+				Content = content,
+				CloseButtonText = "Fermer",
+				XamlRoot = MainWindow.Instance.Content.XamlRoot
+			};
+
+			string? pendingDeleteId = null;
+
+			void RefreshList(string? selectedWorkspaceId = null)
+			{
+				var workspaces = WorkspacePilotManager.Workspaces.ToList();
+				var active = WorkspacePilotManager.ActiveWorkspace;
+
+				workspaceList.ItemsSource = null;
+				workspaceList.ItemsSource = workspaces;
+
+				var idToSelect = selectedWorkspaceId ?? active.Id;
+				workspaceList.SelectedItem = workspaces.FirstOrDefault(x => x.Id == idToSelect) ?? workspaces.FirstOrDefault();
+
+				activeText.Text = $"Workspace actif : {active.Name}";
+				deleteButton.IsEnabled = workspaces.Count > 1;
+			}
+
+			workspaceList.SelectionChanged += (_, _) =>
+			{
+				pendingDeleteId = null;
+				statusText.Text = string.Empty;
+
+				if (workspaceList.SelectedItem is WorkspacePilotWorkspace selected)
+					nameBox.Text = selected.Name;
+			};
+
+			openButton.Click += (_, _) =>
+			{
+				if (workspaceList.SelectedItem is not WorkspacePilotWorkspace selected)
+					return;
+
+				if (selected.Id == WorkspacePilotManager.ActiveWorkspace.Id)
+				{
+					statusText.Text = "Ce workspace est déjà actif.";
+					return;
+				}
+
+				AppLifecycleHelper.SaveSessionTabs();
+				WorkspacePilotManager.SetActiveWorkspace(selected.Id);
+				dialog.Hide();
+				Microsoft.Windows.AppLifecycle.AppInstance.Restart("");
+			};
+
+			newButton.Click += (_, _) =>
+			{
+				AppLifecycleHelper.SaveSessionTabs();
+
+				var name = string.IsNullOrWhiteSpace(nameBox.Text)
+					? $"Workspace {WorkspacePilotManager.Workspaces.Count + 1}"
+					: nameBox.Text.Trim();
+
+				WorkspacePilotManager.CreateWorkspace(name);
+				dialog.Hide();
+				Microsoft.Windows.AppLifecycle.AppInstance.Restart("");
+			};
+
+			renameButton.Click += (_, _) =>
+			{
+				if (workspaceList.SelectedItem is not WorkspacePilotWorkspace selected)
+					return;
+
+				if (string.IsNullOrWhiteSpace(nameBox.Text))
+				{
+					statusText.Text = "Entre un nom pour le workspace.";
+					return;
+				}
+
+				WorkspacePilotManager.RenameWorkspace(selected.Id, nameBox.Text.Trim());
+				pendingDeleteId = null;
+				statusText.Text = "Workspace renommé.";
+				RefreshList(selected.Id);
+			};
+
+			deleteButton.Click += (_, _) =>
+			{
+				if (workspaceList.SelectedItem is not WorkspacePilotWorkspace selected)
+					return;
+
+				if (WorkspacePilotManager.Workspaces.Count <= 1)
+				{
+					statusText.Text = "Il faut conserver au moins un workspace.";
+					return;
+				}
+
+				if (pendingDeleteId != selected.Id)
+				{
+					pendingDeleteId = selected.Id;
+					statusText.Text = $"Clique encore sur Supprimer pour confirmer la suppression de « {selected.Name} ».";
+					return;
+				}
+
+				var wasActive = selected.Id == WorkspacePilotManager.ActiveWorkspace.Id;
+				if (!WorkspacePilotManager.DeleteWorkspace(selected.Id))
+					return;
+
+				if (wasActive)
+				{
+					dialog.Hide();
+					Microsoft.Windows.AppLifecycle.AppInstance.Restart("");
+					return;
+				}
+
+				pendingDeleteId = null;
+				statusText.Text = "Workspace supprimé.";
+				RefreshList();
+			};
+
+			RefreshList();
+			await dialog.ShowAsync();
 		}
 
 		public readonly ICommand CreateLibraryCommand = new AsyncRelayCommand(LibraryManager.ShowCreateNewLibraryDialogAsync);
