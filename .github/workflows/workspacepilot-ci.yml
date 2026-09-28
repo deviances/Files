@@ -4,17 +4,17 @@ on:
   push:
     branches:
       - workspacepilot-v0.1
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 env:
   SOLUTION_PATH: '${{ github.workspace }}\Files.slnx'
   APP_PROJECT_PATH: '${{ github.workspace }}\src\Files.App\Files.App.csproj'
+  ARTIFACT_DIR: '${{ github.workspace }}\artifacts\WorkspacePilot'
+  APPX_PACKAGE_DIR: '${{ github.workspace }}\artifacts\WorkspacePilot\AppxPackages\'
+  CERT_PATH: '${{ github.workspace }}\artifacts\WorkspacePilot\WorkspacePilot.pfx'
 
 jobs:
-  build-x64-debug:
+  package-x64:
     runs-on: windows-2025
 
     steps:
@@ -42,13 +42,101 @@ jobs:
             -p:PublishReadyToRun=false `
             -v:minimal
 
-      - name: Build
+      - name: Create test signing certificate
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:ARTIFACT_DIR | Out-Null
+          ./.github/scripts/Generate-SelfCertPfx.ps1 -Destination "$env:CERT_PATH"
+
+      - name: Build and package WorkspacePilot
         shell: pwsh
         run: |
           msbuild $env:APP_PROJECT_PATH `
             -t:Build `
             -p:Configuration=Debug `
             -p:Platform=x64 `
+            -p:AppxBundlePlatforms=x64 `
             -p:AppxBundle=Never `
-            -p:GenerateAppxPackageOnBuild=false `
+            -p:GenerateAppxPackageOnBuild=true `
+            -p:UapAppxPackageBuildMode=SideloadOnly `
+            -p:AppxPackageDir=$env:APPX_PACKAGE_DIR `
+            -p:AppxPackageSigningEnabled=true `
+            -p:PackageCertificateKeyFile=$env:CERT_PATH `
+            -p:PackageCertificatePassword="" `
+            -p:PackageCertificateThumbprint="" `
             -v:minimal
+
+      - name: Prepare one-click installer
+        shell: pwsh
+        run: |
+          $cert = Get-PfxCertificate -FilePath $env:CERT_PATH
+          Export-Certificate -Cert $cert -FilePath (Join-Path $env:ARTIFACT_DIR "WorkspacePilot.cer") | Out-Null
+
+          @'
+          $ErrorActionPreference = "Stop"
+          $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+          $certPath = Join-Path $root "WorkspacePilot.cer"
+
+          Write-Host ""
+          Write-Host "WorkspacePilot V0.1 - installation" -ForegroundColor Cyan
+          Write-Host ""
+
+          if (Test-Path $certPath) {
+              Import-Certificate -FilePath $certPath -CertStoreLocation "Cert:\CurrentUser\TrustedPeople" | Out-Null
+          }
+
+          $package = Get-ChildItem $root -Recurse -File |
+              Where-Object { $_.Extension -in ".msix", ".msixbundle" -and $_.FullName -notmatch "\\Dependencies\\" } |
+              Select-Object -First 1
+
+          if (-not $package) {
+              throw "Package WorkspacePilot introuvable."
+          }
+
+          $dependencies = @(
+              Get-ChildItem $root -Recurse -File -Filter *.appx |
+              Where-Object { $_.FullName -match "\\Dependencies\\x64\\" } |
+              ForEach-Object { $_.FullName }
+          )
+
+          if ($dependencies.Count -gt 0) {
+              Add-AppxPackage -Path $package.FullName -DependencyPath $dependencies -ForceApplicationShutdown
+          } else {
+              Add-AppxPackage -Path $package.FullName -ForceApplicationShutdown
+          }
+
+          Write-Host ""
+          Write-Host "WorkspacePilot est installe." -ForegroundColor Green
+          Write-Host "Tu peux le lancer depuis le menu Demarrer en recherchant WorkspacePilot."
+          Write-Host ""
+          '@ | Set-Content -Path (Join-Path $env:ARTIFACT_DIR "Install-WorkspacePilot.ps1") -Encoding UTF8
+
+          @'
+          @echo off
+          title WorkspacePilot V0.1 Installer
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Install-WorkspacePilot.ps1"
+          echo.
+          pause
+          '@ | Set-Content -Path (Join-Path $env:ARTIFACT_DIR "INSTALL_WORKSPACEPILOT.cmd") -Encoding ASCII
+
+          @'
+          WorkspacePilot V0.1 TEST
+          ========================
+
+          1. Extraire tout le ZIP.
+          2. Double-cliquer sur INSTALL_WORKSPACEPILOT.cmd.
+          3. Lancer "WorkspacePilot" depuis le menu Demarrer.
+
+          Cette version utilise l'identite de developpement FilesDev.
+          Elle peut donc coexister avec l'installation normale de Files.
+          '@ | Set-Content -Path (Join-Path $env:ARTIFACT_DIR "README_INSTALL.txt") -Encoding UTF8
+
+          Remove-Item $env:CERT_PATH -Force
+
+      - name: Upload WorkspacePilot package
+        uses: actions/upload-artifact@v7
+        with:
+          name: WorkspacePilot-V0.1-x64
+          path: ${{ env.ARTIFACT_DIR }}
+          if-no-files-found: error
+          retention-days: 30
