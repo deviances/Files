@@ -153,21 +153,58 @@ namespace Files.App.Utils
 		}
 
 		public static bool RenameActiveWorkspace(string name)
+			=> RenameWorkspace(ActiveWorkspace.Id, name);
+
+		public static bool RenameWorkspace(string workspaceId, string name)
 		{
-			if (string.IsNullOrWhiteSpace(name))
+			if (string.IsNullOrWhiteSpace(workspaceId) || string.IsNullOrWhiteSpace(name))
 				return false;
 
 			var changed = false;
 
 			lock (SyncRoot)
 			{
-				var workspace = EnsureActiveWorkspaceUnsafe();
-				var trimmed = name.Trim();
+				var workspace = store.Workspaces.FirstOrDefault(x => x.Id == workspaceId);
+				if (workspace is null)
+					return false;
 
+				var trimmed = name.Trim();
 				if (workspace.Name == trimmed)
 					return false;
 
 				workspace.Name = trimmed;
+				SaveStoreUnsafe();
+				changed = true;
+			}
+
+			if (changed)
+				Changed?.Invoke(null, EventArgs.Empty);
+
+			return changed;
+		}
+
+		public static bool DeleteWorkspace(string workspaceId)
+		{
+			if (string.IsNullOrWhiteSpace(workspaceId))
+				return false;
+
+			var changed = false;
+
+			lock (SyncRoot)
+			{
+				if (store.Workspaces.Count <= 1)
+					return false;
+
+				var workspace = store.Workspaces.FirstOrDefault(x => x.Id == workspaceId);
+				if (workspace is null)
+					return false;
+
+				var wasActive = store.ActiveWorkspaceId == workspaceId;
+				store.Workspaces.Remove(workspace);
+
+				if (wasActive)
+					store.ActiveWorkspaceId = store.Workspaces[0].Id;
+
 				SaveStoreUnsafe();
 				changed = true;
 			}
