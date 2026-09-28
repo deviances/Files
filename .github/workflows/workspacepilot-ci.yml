@@ -1,0 +1,54 @@
+name: WorkspacePilot CI
+
+on:
+  push:
+    branches:
+      - workspacepilot-v0.1
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  SOLUTION_PATH: '${{ github.workspace }}\Files.slnx'
+  APP_PROJECT_PATH: '${{ github.workspace }}\src\Files.App\Files.App.csproj'
+
+jobs:
+  build-x64-debug:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        shell: pwsh
+        run: |
+          msbuild $env:SOLUTION_PATH `
+            -t:Restore `
+            -p:Platform=x64 `
+            -p:Configuration=Debug `
+            -p:PublishReadyToRun=false `
+            -v:minimal
+
+      - name: Build
+        shell: pwsh
+        run: |
+          msbuild $env:APP_PROJECT_PATH `
+            -t:Build `
+            -p:Configuration=Debug `
+            -p:Platform=x64 `
+            -p:AppxBundle=Never `
+            -p:GenerateAppxPackageOnBuild=false `
+            -v:minimal
