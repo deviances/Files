@@ -70,6 +70,154 @@ namespace Files.App.Views
 			App.AppModel.PropertyChanged += AppModel_PropertyChanged;
 
 			ApplySidebarWidthState();
+			WorkspaceManagerLabel.Text = $"Workspaces · {WorkspacePilotManager.ActiveWorkspace.Name}";
+		}
+
+		private async void WorkspaceManagerButton_Click(object sender, RoutedEventArgs e)
+		{
+			if (sender is not FrameworkElement anchor)
+				return;
+
+			var flyout = new MenuFlyout();
+
+			var active = WorkspacePilotManager.ActiveWorkspace;
+			flyout.Items.Add(new MenuFlyoutItem
+			{
+				Text = $"Actif : {active.Name}",
+				IsEnabled = false
+			});
+			flyout.Items.Add(new MenuFlyoutSeparator());
+
+			foreach (var workspace in WorkspacePilotManager.Workspaces)
+			{
+				var item = new ToggleMenuFlyoutItem
+				{
+					Text = workspace.Name,
+					IsChecked = workspace.Id == active.Id
+				};
+
+				var workspaceId = workspace.Id;
+				item.Click += (_, _) => SwitchWorkspace(workspaceId);
+				flyout.Items.Add(item);
+			}
+
+			flyout.Items.Add(new MenuFlyoutSeparator());
+
+			var createItem = new MenuFlyoutItem { Text = "+ Nouveau workspace" };
+			createItem.Click += async (_, _) => await CreateWorkspaceAsync();
+			flyout.Items.Add(createItem);
+
+			var renameItem = new MenuFlyoutItem { Text = "Renommer le workspace actif" };
+			renameItem.Click += async (_, _) => await RenameActiveWorkspaceAsync();
+			flyout.Items.Add(renameItem);
+
+			var deleteItem = new MenuFlyoutItem
+			{
+				Text = "Supprimer le workspace actif",
+				IsEnabled = WorkspacePilotManager.Workspaces.Count > 1
+			};
+			deleteItem.Click += async (_, _) => await DeleteActiveWorkspaceAsync();
+			flyout.Items.Add(deleteItem);
+
+			flyout.ShowAt(anchor);
+		}
+
+		private async void WorkspaceQuickAddButton_Click(object sender, RoutedEventArgs e)
+		{
+			await CreateWorkspaceAsync();
+		}
+
+		private async Task CreateWorkspaceAsync()
+		{
+			var suggestedName = $"Workspace {WorkspacePilotManager.Workspaces.Count + 1}";
+			var nameBox = new TextBox
+			{
+				Text = suggestedName,
+				SelectAllOnFocus = true
+			};
+
+			var dialog = new ContentDialog
+			{
+				Title = "Nouveau workspace",
+				Content = nameBox,
+				PrimaryButtonText = "Créer",
+				CloseButtonText = "Annuler",
+				DefaultButton = ContentDialogButton.Primary
+			};
+
+			var result = await SetContentDialogRoot(dialog).TryShowAsync();
+			if (result != ContentDialogResult.Primary)
+				return;
+
+			var name = string.IsNullOrWhiteSpace(nameBox.Text) ? suggestedName : nameBox.Text.Trim();
+
+			AppLifecycleHelper.SaveSessionTabs();
+			WorkspacePilotManager.CreateWorkspace(name);
+			RestartIntoActiveWorkspace();
+		}
+
+		private async Task RenameActiveWorkspaceAsync()
+		{
+			var active = WorkspacePilotManager.ActiveWorkspace;
+			var nameBox = new TextBox
+			{
+				Text = active.Name,
+				SelectAllOnFocus = true
+			};
+
+			var dialog = new ContentDialog
+			{
+				Title = "Renommer le workspace",
+				Content = nameBox,
+				PrimaryButtonText = "Renommer",
+				CloseButtonText = "Annuler",
+				DefaultButton = ContentDialogButton.Primary
+			};
+
+			var result = await SetContentDialogRoot(dialog).TryShowAsync();
+			if (result != ContentDialogResult.Primary || string.IsNullOrWhiteSpace(nameBox.Text))
+				return;
+
+			if (WorkspacePilotManager.RenameWorkspace(active.Id, nameBox.Text.Trim()))
+				RestartIntoActiveWorkspace();
+		}
+
+		private async Task DeleteActiveWorkspaceAsync()
+		{
+			if (WorkspacePilotManager.Workspaces.Count <= 1)
+				return;
+
+			var active = WorkspacePilotManager.ActiveWorkspace;
+			var dialog = new ContentDialog
+			{
+				Title = $"Supprimer « {active.Name} » ?",
+				Content = "Les accès épinglés et la session d’onglets de ce workspace seront supprimés.",
+				PrimaryButtonText = "Supprimer",
+				CloseButtonText = "Annuler",
+				DefaultButton = ContentDialogButton.Close
+			};
+
+			var result = await SetContentDialogRoot(dialog).TryShowAsync();
+			if (result != ContentDialogResult.Primary)
+				return;
+
+			if (WorkspacePilotManager.DeleteWorkspace(active.Id))
+				RestartIntoActiveWorkspace();
+		}
+
+		private void SwitchWorkspace(string workspaceId)
+		{
+			if (workspaceId == WorkspacePilotManager.ActiveWorkspace.Id)
+				return;
+
+			AppLifecycleHelper.SaveSessionTabs();
+			if (WorkspacePilotManager.SetActiveWorkspace(workspaceId))
+				RestartIntoActiveWorkspace();
+		}
+
+		private static void RestartIntoActiveWorkspace()
+		{
+			Microsoft.Windows.AppLifecycle.AppInstance.Restart("");
 		}
 
 		private void NumberedTabKeyboardAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs e)
