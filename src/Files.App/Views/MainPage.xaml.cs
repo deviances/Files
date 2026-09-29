@@ -161,7 +161,6 @@ namespace Files.App.Views
 			var nameBox = new TextBox
 			{
 				Text = active.Name,
-				SelectAllOnFocus = true
 			};
 
 			var dialog = new ContentDialog
