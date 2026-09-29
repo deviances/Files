@@ -132,8 +132,7 @@ namespace Files.App.Views
 			var suggestedName = $"Workspace {WorkspacePilotManager.Workspaces.Count + 1}";
 			var nameBox = new TextBox
 			{
-				Text = suggestedName,
-				SelectAllOnFocus = true
+				Text = suggestedName
 			};
 
 			var dialog = new ContentDialog
