@@ -306,19 +306,40 @@
 						HorizontalAlignment="Stretch"
 						BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
 						BorderThickness="1" />
-					<controls:SidebarItem
-						x:Name="WorkspaceManagerButton"
-						AutomationProperties.AutomationId="WorkspaceManagerButton"
-						AutomationProperties.Name="Workspaces"
-						Item="{x:Bind SidebarAdaptiveViewModel.WorkspaceManagerSidebarItem, Mode=OneWay}"
-						Text="{x:Bind SidebarAdaptiveViewModel.WorkspaceManagerSidebarItem.Text, Mode=OneWay}"
-						ToolTip="Gérer les workspaces">
-						<controls:SidebarItem.Icon>
-							<FontIcon
-								Glyph="&#xE8B7;"
-								Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-						</controls:SidebarItem.Icon>
-					</controls:SidebarItem>
+					<Grid ColumnSpacing="4">
+						<Grid.ColumnDefinitions>
+							<ColumnDefinition Width="*" />
+							<ColumnDefinition Width="Auto" />
+						</Grid.ColumnDefinitions>
+
+						<Button
+							x:Name="WorkspaceManagerButton"
+							HorizontalAlignment="Stretch"
+							HorizontalContentAlignment="Left"
+							Background="Transparent"
+							BorderThickness="0"
+							Click="WorkspaceManagerButton_Click"
+							ToolTipService.ToolTip="Changer de workspace">
+							<StackPanel Orientation="Horizontal" Spacing="8">
+								<FontIcon Glyph="&#xE8B7;" />
+								<TextBlock
+									x:Name="WorkspaceManagerLabel"
+									VerticalAlignment="Center"
+									Text="Workspaces" />
+							</StackPanel>
+						</Button>
+
+						<Button
+							x:Name="WorkspaceQuickAddButton"
+							Grid.Column="1"
+							MinWidth="32"
+							Padding="8,0"
+							Background="Transparent"
+							BorderThickness="0"
+							Click="WorkspaceQuickAddButton_Click"
+							Content="+"
+							ToolTipService.ToolTip="Nouveau workspace" />
+					</Grid>
 
 					<controls:SidebarItem
 						x:Name="SettingsButton"
