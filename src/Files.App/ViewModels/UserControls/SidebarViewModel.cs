@@ -573,7 +573,7 @@ namespace Files.App.ViewModels.UserControls
 				case SectionType.Pinned:
 					if (ShowPinnedFoldersSection == false)
 						break;
-					section = BuildSection("Workspace", sectionType, new ContextMenuOptions { ShowHideSection = true }, false);
+					section = BuildSection($"Workspace · {WorkspacePilotManager.ActiveWorkspace.Name}", sectionType, new ContextMenuOptions { ShowHideSection = true }, false);
 					section.IsHeader = true;
 					break;
 
