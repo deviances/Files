@@ -97,7 +97,7 @@ namespace Files.App.Views
 				};
 
 				var workspaceId = workspace.Id;
-				item.Click += (_, _) => SwitchWorkspace(workspaceId);
+				item.Click += async (_, _) => await SwitchWorkspaceAsync(workspaceId);
 				flyout.Items.Add(item);
 			}
 
@@ -107,13 +107,25 @@ namespace Files.App.Views
 			createItem.Click += async (_, _) => await CreateWorkspaceAsync();
 			flyout.Items.Add(createItem);
 
-			var renameItem = new MenuFlyoutItem { Text = "Renommer le workspace actif" };
+			flyout.ShowAt(anchor);
+		}
+
+		private void WorkspaceManagerButton_RightTapped(object sender, RightTappedRoutedEventArgs e)
+		{
+			if (sender is not FrameworkElement anchor)
+				return;
+
+			e.Handled = true;
+
+			var flyout = new MenuFlyout();
+
+			var renameItem = new MenuFlyoutItem { Text = "Renommer" };
 			renameItem.Click += async (_, _) => await RenameActiveWorkspaceAsync();
 			flyout.Items.Add(renameItem);
 
 			var deleteItem = new MenuFlyoutItem
 			{
-				Text = "Supprimer le workspace actif",
+				Text = "Supprimer",
 				IsEnabled = WorkspacePilotManager.Workspaces.Count > 1
 			};
 			deleteItem.Click += async (_, _) => await DeleteActiveWorkspaceAsync();
@@ -152,7 +164,7 @@ namespace Files.App.Views
 
 			AppLifecycleHelper.SaveSessionTabs();
 			WorkspacePilotManager.CreateWorkspace(name);
-			RestartIntoActiveWorkspace();
+			await RestartIntoActiveWorkspaceAsync();
 		}
 
 		private async Task RenameActiveWorkspaceAsync()
@@ -177,7 +189,7 @@ namespace Files.App.Views
 				return;
 
 			if (WorkspacePilotManager.RenameWorkspace(active.Id, nameBox.Text.Trim()))
-				RestartIntoActiveWorkspace();
+				await RestartIntoActiveWorkspaceAsync();
 		}
 
 		private async Task DeleteActiveWorkspaceAsync()
@@ -200,22 +212,26 @@ namespace Files.App.Views
 				return;
 
 			if (WorkspacePilotManager.DeleteWorkspace(active.Id))
-				RestartIntoActiveWorkspace();
+				await RestartIntoActiveWorkspaceAsync();
 		}
 
-		private void SwitchWorkspace(string workspaceId)
+		private async Task SwitchWorkspaceAsync(string workspaceId)
 		{
 			if (workspaceId == WorkspacePilotManager.ActiveWorkspace.Id)
 				return;
 
 			AppLifecycleHelper.SaveSessionTabs();
+
 			if (WorkspacePilotManager.SetActiveWorkspace(workspaceId))
-				RestartIntoActiveWorkspace();
+				await RestartIntoActiveWorkspaceAsync();
 		}
 
-		private static void RestartIntoActiveWorkspace()
+		private static async Task RestartIntoActiveWorkspaceAsync()
 		{
-			Microsoft.Windows.AppLifecycle.AppInstance.Restart("");
+			// Use the same restart flow as Files itself.
+			// The build pipeline rewrites files-dev: to files-preview: for sideload builds.
+			await Windows.System.Launcher.LaunchUriAsync(new Uri("files-dev:"));
+			Environment.Exit(0);
 		}
 
 		private void NumberedTabKeyboardAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs e)
