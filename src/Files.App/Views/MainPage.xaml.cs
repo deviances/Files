@@ -104,7 +104,7 @@ namespace Files.App.Views
 			flyout.Items.Add(new MenuFlyoutSeparator());
 
 			var createItem = new MenuFlyoutItem { Text = "+ Nouveau workspace" };
-			createItem.Click += async (_, _) => await CreateWorkspaceAsync();
+			createItem.Click += async (_, _) => await CreateWorkspaceDirectAsync();
 			flyout.Items.Add(createItem);
 
 			flyout.ShowAt(anchor);
@@ -136,34 +136,16 @@ namespace Files.App.Views
 
 		private async void WorkspaceQuickAddButton_Click(object sender, RoutedEventArgs e)
 		{
-			await CreateWorkspaceAsync();
+			await CreateWorkspaceDirectAsync();
 		}
 
-		private async Task CreateWorkspaceAsync()
+		private async Task CreateWorkspaceDirectAsync()
 		{
-			var suggestedName = $"Workspace {WorkspacePilotManager.Workspaces.Count + 1}";
-			var nameBox = new TextBox
-			{
-				Text = suggestedName
-			};
-
-			var dialog = new ContentDialog
-			{
-				Title = "Nouveau workspace",
-				Content = nameBox,
-				PrimaryButtonText = "Créer",
-				CloseButtonText = "Annuler",
-				DefaultButton = ContentDialogButton.Primary
-			};
-
-			var result = await SetContentDialogRoot(dialog).TryShowAsync();
-			if (result != ContentDialogResult.Primary)
-				return;
-
-			var name = string.IsNullOrWhiteSpace(nameBox.Text) ? suggestedName : nameBox.Text.Trim();
-
 			AppLifecycleHelper.SaveSessionTabs();
-			WorkspacePilotManager.CreateWorkspace(name);
+
+			var workspaceNumber = WorkspacePilotManager.Workspaces.Count + 1;
+			WorkspacePilotManager.CreateWorkspace($"Workspace {workspaceNumber}");
+
 			await RestartIntoActiveWorkspaceAsync();
 		}
 
