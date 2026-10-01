@@ -21,6 +21,16 @@ namespace Files.App.Data.Models
 
 		public readonly List<INavigationControlItem> _PinnedFolderItems = [];
 
+		public PinnedFoldersManager()
+		{
+			WorkspacePilotManager.Changed += WorkspacePilotManager_Changed;
+		}
+
+		private async void WorkspacePilotManager_Changed(object? sender, EventArgs e)
+		{
+			await LoadAsync();
+		}
+
 		[JsonIgnore]
 		public IReadOnlyList<INavigationControlItem> PinnedFolderItems
 		{
@@ -41,10 +51,7 @@ namespace Files.App.Data.Models
 			try
 			{
 				var formerPinnedFolders = PinnedFolders.ToList();
-
-				PinnedFolders = (await QuickAccessService.GetPinnedFoldersAsync())
-					.Where(link => (bool?)link.Properties["System.Home.IsPinned"] ?? false)
-					.Select(link => link.FilePath!).ToList();
+				PinnedFolders = WorkspacePilotManager.ActiveWorkspace.Pins.ToList();
 
 				if (formerPinnedFolders.SequenceEqual(PinnedFolders))
 					return;
@@ -265,10 +272,6 @@ namespace Files.App.Data.Models
 		public async void LoadAsync(object? sender, FileSystemEventArgs e)
 		{
 			await LoadAsync();
-			App.QuickAccessManager.UpdateQuickAccessWidget?.Invoke(null, new ModifyQuickAccessEventArgs((await QuickAccessService.GetPinnedFoldersAsync()).ToArray(), true)
-			{
-				Reset = true
-			});
 		}
 
 		public async Task LoadAsync()

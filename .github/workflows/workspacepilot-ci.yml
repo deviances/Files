@@ -1,0 +1,250 @@
+name: WorkspacePilot CI
+
+on:
+  push:
+    branches:
+      - workspacepilot-v0.1
+  workflow_dispatch:
+
+concurrency:
+  group: workspacepilot-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SOLUTION_NAME: 'Files.slnx'
+  CONFIGURATION: 'Release'
+  PLATFORM: 'x64'
+  WORKING_DIR: '${{ github.workspace }}'
+  ARTIFACT_DIR: '${{ github.workspace }}\artifacts\WorkspacePilot'
+  APPX_PACKAGE_DIR: '${{ github.workspace }}\artifacts\WorkspacePilot\AppxPackages\'
+  APP_PROJECT_PATH: 'src\Files.App\Files.App.csproj'
+  PACKAGE_MANIFEST_PATH: 'src\Files.App\Package.appxmanifest'
+  LAUNCHER_PROJECT_PATH: 'src\Files.App.Launcher\Files.App.Launcher.vcxproj'
+  CERT_PATH: '${{ github.workspace }}\artifacts\WorkspacePilot\WorkspacePilot.pfx'
+
+jobs:
+  package-x64:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Configure official sideload environment
+        shell: pwsh
+        run: |
+          . './.github/scripts/Configure-AppxManifest.ps1' `
+            -Branch "SideloadPreview" `
+            -PackageManifestPath "$env:PACKAGE_MANIFEST_PATH" `
+            -Publisher "CN=Files" `
+            -WorkingDir "$env:WORKING_DIR" `
+            -SecretBingMapsKey "" `
+            -SecretSentry "" `
+            -SecretGitHubOAuthClientId ""
+
+          [xml]$manifest = Get-Content $env:PACKAGE_MANIFEST_PATH
+          $manifest.Package.Identity.Name = "WorkspacePilot"
+          $manifest.Package.Properties.DisplayName = "WorkspacePilot"
+          $manifest.Package.Applications.Application.VisualElements.DisplayName = "WorkspacePilot"
+          $manifest.Package.Applications.Application.VisualElements.DefaultTile.ShortName = "WorkspacePilot"
+          $manifest.Save($env:PACKAGE_MANIFEST_PATH)
+
+      - name: Restore Files
+        shell: pwsh
+        run: |
+          msbuild $env:SOLUTION_NAME `
+            -t:Restore `
+            -p:Platform=$env:PLATFORM `
+            -p:Configuration=$env:CONFIGURATION `
+            -p:PublishReadyToRun=true `
+            -v:minimal
+
+      - name: Restore launcher packages
+        shell: pwsh
+        run: |
+          nuget restore "$env:LAUNCHER_PROJECT_PATH" `
+            -SolutionDirectory "$env:WORKING_DIR" `
+            -Verbosity normal
+
+      - name: Build launcher
+        shell: pwsh
+        run: |
+          msbuild "$env:LAUNCHER_PROJECT_PATH" `
+            -t:Build `
+            -p:Platform=$env:PLATFORM `
+            -p:Configuration=$env:CONFIGURATION `
+            -v:minimal
+
+      - name: Create test signing certificate
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:ARTIFACT_DIR | Out-Null
+          ./.github/scripts/Generate-SelfCertPfx.ps1 -Destination "$env:CERT_PATH"
+
+      - name: Build and package WorkspacePilot
+        shell: pwsh
+        run: |
+          msbuild "$env:APP_PROJECT_PATH" `
+            -t:Build `
+            -p:Platform=$env:PLATFORM `
+            -p:Configuration=$env:CONFIGURATION `
+            -p:PublishReadyToRun=true `
+            -p:AppxPackageDir="$env:APPX_PACKAGE_DIR" `
+            -p:AppxBundle=Never `
+            -p:GenerateAppxPackageOnBuild=true `
+            -p:UapAppxPackageBuildMode=Sideload `
+            -p:AppxPackageSigningEnabled=true `
+            -p:PackageCertificateKeyFile="$env:CERT_PATH" `
+            -p:PackageCertificatePassword="" `
+            -p:PackageCertificateThumbprint="" `
+            -v:minimal
+
+      - name: Prepare installer and diagnostics
+        shell: pwsh
+        run: |
+          $cert = Get-PfxCertificate -FilePath $env:CERT_PATH
+          Export-Certificate -Cert $cert -FilePath (Join-Path $env:ARTIFACT_DIR "WorkspacePilot.cer") | Out-Null
+
+          @'
+          $ErrorActionPreference = "Stop"
+          $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+          $certPath = Join-Path $root "WorkspacePilot.cer"
+          $logPath = Join-Path $root "WorkspacePilot_install.log"
+          Start-Transcript -Path $logPath -Force | Out-Null
+          try {
+              $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+              $principal = New-Object Security.Principal.WindowsPrincipal($id)
+              if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+                  throw "L'installateur doit etre lance avec les droits administrateur."
+              }
+
+              $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($certPath)
+              $trusted = Get-ChildItem "Cert:\LocalMachine\TrustedPeople" |
+                  Where-Object { $_.Thumbprint -eq $cert.Thumbprint } |
+                  Select-Object -First 1
+              if (-not $trusted) {
+                  Import-Certificate -FilePath $certPath -CertStoreLocation "Cert:\LocalMachine\TrustedPeople" | Out-Null
+              }
+
+              $package = Get-ChildItem $root -Recurse -File |
+                  Where-Object { $_.Extension -in ".msix", ".msixbundle" -and $_.FullName -notmatch "\\Dependencies\\" } |
+                  Select-Object -First 1
+              if (-not $package) { throw "Package WorkspacePilot introuvable." }
+
+              $dependencies = @(
+                  Get-ChildItem $root -Recurse -File |
+                  Where-Object { $_.Extension -in ".appx", ".msix" -and $_.FullName -match "\\Dependencies\\x64\\" } |
+                  ForEach-Object { $_.FullName }
+              )
+
+              Get-AppxPackage WorkspacePilot -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue
+
+              if ($dependencies.Count -gt 0) {
+                  Add-AppxPackage -Path $package.FullName -DependencyPath $dependencies -ForceApplicationShutdown
+              } else {
+                  Add-AppxPackage -Path $package.FullName -ForceApplicationShutdown
+              }
+
+              Write-Host ""
+              Write-Host "WorkspacePilot est installe." -ForegroundColor Green
+              Write-Host "Recherche WorkspacePilot dans le menu Demarrer."
+          }
+          finally {
+              try { Stop-Transcript | Out-Null } catch {}
+          }
+          '@ | Set-Content -Path (Join-Path $env:ARTIFACT_DIR "Install-WorkspacePilot.ps1") -Encoding UTF8
+
+          @'
+          @echo off
+          setlocal
+          title WorkspacePilot Installer
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+            "$id=[Security.Principal.WindowsIdentity]::GetCurrent();" ^
+            "$p=New-Object Security.Principal.WindowsPrincipal($id);" ^
+            "if(-not $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){" ^
+            "Start-Process powershell.exe -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','""%~dp0Install-WorkspacePilot.ps1""'; exit 123 } else { exit 0 }"
+          if %errorlevel%==123 exit /b
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Install-WorkspacePilot.ps1"
+          echo.
+          pause
+          '@ | Set-Content -Path (Join-Path $env:ARTIFACT_DIR "INSTALL_WORKSPACEPILOT.cmd") -Encoding ASCII
+
+          @'
+          $ErrorActionPreference = "SilentlyContinue"
+          $out = Join-Path $PSScriptRoot "WorkspacePilot_Diagnostics"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+
+          $pkg = Get-AppxPackage WorkspacePilot
+          if ($pkg) {
+              $pkg | Format-List * | Out-File (Join-Path $out "package.txt")
+              $localState = Join-Path $env:LOCALAPPDATA ("Packages\" + $pkg.PackageFamilyName + "\LocalState")
+              if (Test-Path $localState) {
+                  Copy-Item (Join-Path $localState "debug.log") $out -ErrorAction SilentlyContinue
+                  Copy-Item (Join-Path $localState "*.log") $out -ErrorAction SilentlyContinue
+
+                  $workspaceFile = Join-Path $localState "WorkspacePilot\workspaces.json"
+                  if (Test-Path $workspaceFile) {
+                      Copy-Item $workspaceFile (Join-Path $out "workspaces.json") -Force
+                  }
+              }
+          }
+
+          Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddHours(-2)} -ErrorAction SilentlyContinue |
+              Where-Object { $_.Message -match 'WorkspacePilot|FilesPreview|Files.App|Files' } |
+              Select-Object -First 100 TimeCreated, Id, LevelDisplayName, ProviderName, Message |
+              Format-List | Out-File (Join-Path $out "windows-events.txt")
+
+          Compress-Archive -Path (Join-Path $out "*") -DestinationPath (Join-Path $PSScriptRoot "WorkspacePilot_Diagnostics.zip") -Force
+          Start-Process explorer.exe $out
+          '@ | Set-Content -Path (Join-Path $env:ARTIFACT_DIR "Collect-WorkspacePilot-Logs.ps1") -Encoding UTF8
+
+          @'
+          @echo off
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Collect-WorkspacePilot-Logs.ps1"
+          echo.
+          echo Diagnostics creees : WorkspacePilot_Diagnostics.zip
+          pause
+          '@ | Set-Content -Path (Join-Path $env:ARTIFACT_DIR "COLLECT_LOGS.cmd") -Encoding ASCII
+
+          @'
+          WorkspacePilot V0.2.0 TEST
+          ==========================
+
+          Build produite avec le pipeline sideload officiel de Files :
+          - environnement SideloadPreview
+          - configuration Release
+          - launcher natif compile
+          - package x64 signe avec certificat de test
+
+          Installation :
+          1. Extraire tout le ZIP.
+          2. Double-cliquer INSTALL_WORKSPACEPILOT.cmd.
+          3. Accepter la demande administrateur.
+          4. Lancer WorkspacePilot depuis le menu Demarrer.
+
+          Si l'application bloque :
+          1. Fermer WorkspacePilot.
+          2. Double-cliquer COLLECT_LOGS.cmd.
+          3. Envoyer WorkspacePilot_Diagnostics.zip.
+          '@ | Set-Content -Path (Join-Path $env:ARTIFACT_DIR "README_INSTALL.txt") -Encoding UTF8
+
+          Remove-Item $env:CERT_PATH -Force
+
+      - name: Upload WorkspacePilot package
+        uses: actions/upload-artifact@v7
+        with:
+          name: WorkspacePilot-V0.2.0-x64
+          path: ${{ env.ARTIFACT_DIR }}
+          if-no-files-found: error
+          retention-days: 30

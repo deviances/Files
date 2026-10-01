@@ -413,7 +413,7 @@ namespace Files.App.Helpers
 		{
 			var userSettingsService = Ioc.Default.GetRequiredService<IUserSettingsService>();
 
-			userSettingsService.GeneralSettingsService.LastSessionTabList = MainPageViewModel.AppInstances.DefaultIfEmpty().Select(tab =>
+			var serializedTabs = MainPageViewModel.AppInstances.DefaultIfEmpty().Select(tab =>
 			{
 				if (tab is not null && tab.NavigationParameter is not null)
 				{
@@ -426,7 +426,10 @@ namespace Files.App.Helpers
 			})
 			.ToList();
 
+			userSettingsService.GeneralSettingsService.LastSessionTabList = serializedTabs;
 			userSettingsService.GeneralSettingsService.LastSessionSelectedTabIndex = App.AppModel.TabStripSelectedIndex;
+
+			WorkspacePilotManager.SaveActiveSession(serializedTabs, App.AppModel.TabStripSelectedIndex);
 		}
 
 		// XAML delivers Application.UnhandledException with the managed stack already stripped,

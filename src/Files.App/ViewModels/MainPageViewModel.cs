@@ -270,7 +270,12 @@ namespace Files.App.ViewModels
 							BaseTabBar.PushRecentTab(items);
 						}
 
-						if (UserSettingsService.AppSettingsService.RestoreTabsOnStartup)
+						var workspaceSession = WorkspacePilotManager.GetActiveSession();
+						if (workspaceSession.Tabs.Count > 0 && AppInstances.Count == 0)
+						{
+							await RestoreSessionTabsAsync(workspaceSession.Tabs, workspaceSession.SelectedIndex);
+						}
+						else if (UserSettingsService.AppSettingsService.RestoreTabsOnStartup)
 						{
 							UserSettingsService.AppSettingsService.RestoreTabsOnStartup = false;
 							if (UserSettingsService.GeneralSettingsService.LastSessionTabList is not null)
@@ -347,12 +352,13 @@ namespace Files.App.ViewModels
 				NetworkService.UpdateShortcutsAsync());
 		}
 
-		private async Task RestoreSessionTabsAsync(List<string> sessionTabs)
+		private Task RestoreSessionTabsAsync(List<string> sessionTabs)
+			=> RestoreSessionTabsAsync(sessionTabs, UserSettingsService.GeneralSettingsService.LastSessionSelectedTabIndex);
+
+		private async Task RestoreSessionTabsAsync(List<string> sessionTabs, int savedIndex)
 		{
 			if (sessionTabs is null || sessionTabs.Count == 0)
 				return;
-
-			var savedIndex = UserSettingsService.GeneralSettingsService.LastSessionSelectedTabIndex;
 			if (savedIndex < 0 || savedIndex >= sessionTabs.Count)
 				savedIndex = sessionTabs.Count - 1;
 

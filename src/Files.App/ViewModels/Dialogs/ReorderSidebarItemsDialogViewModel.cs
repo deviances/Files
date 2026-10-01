@@ -7,8 +7,6 @@ namespace Files.App.ViewModels.Dialogs
 {
 	public sealed partial class ReorderSidebarItemsDialogViewModel : ObservableObject
 	{
-		private readonly IQuickAccessService quickAccessService = Ioc.Default.GetRequiredService<IQuickAccessService>();
-
 		public string HeaderText = Strings.ReorderSidebarItemsDialogText.GetLocalizedResource();
 		public ICommand PrimaryButtonCommand { get; private set; }
 
@@ -24,7 +22,7 @@ namespace Files.App.ViewModels.Dialogs
 
 		public void SaveChanges()
 		{
-			quickAccessService.SaveAsync(SidebarPinnedFolderItems.Select(x => x.Path!).ToArray());
+			WorkspacePilotManager.ReplacePins(SidebarPinnedFolderItems.Select(x => x.Path!));
 		}
 	}
 }
