@@ -112,7 +112,7 @@ namespace Files.App.Utils
 				Changed?.Invoke(null, EventArgs.Empty);
 		}
 
-		public static WorkspacePilotWorkspace CreateWorkspace(string? name = null)
+		public static WorkspacePilotWorkspace CreateWorkspace(string? name = null, bool activate = false)
 		{
 			WorkspacePilotWorkspace workspace;
 
@@ -124,10 +124,14 @@ namespace Files.App.Utils
 				};
 
 				store.Workspaces.Add(workspace);
-				store.ActiveWorkspaceId = workspace.Id;
+
+				if (activate)
+					store.ActiveWorkspaceId = workspace.Id;
+
 				SaveStoreUnsafe();
 			}
 
+			App.Logger?.LogInformation($"WorkspacePilot: workspace created. Id={workspace.Id}, Name={workspace.Name}, Activate={activate}");
 			Changed?.Invoke(null, EventArgs.Empty);
 			return workspace;
 		}
@@ -266,9 +270,9 @@ namespace Files.App.Utils
 					}
 				}
 			}
-			catch
+			catch (Exception ex)
 			{
-				// A broken workspace file must never prevent Files from starting.
+				App.Logger?.LogError(ex, "WorkspacePilot: failed to load workspaces.json");
 			}
 
 			var initial = new WorkspacePilotStore();
@@ -320,9 +324,9 @@ namespace Files.App.Utils
 				File.WriteAllText(tempPath, JsonSerializer.Serialize(store, JsonOptions));
 				File.Move(tempPath, path, true);
 			}
-			catch
+			catch (Exception ex)
 			{
-				// Workspace persistence is optional and must not crash Files.
+				App.Logger?.LogError(ex, "WorkspacePilot: failed to save workspaces.json");
 			}
 		}
 	}
