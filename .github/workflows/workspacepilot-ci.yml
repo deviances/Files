@@ -192,6 +192,11 @@ jobs:
               if (Test-Path $localState) {
                   Copy-Item (Join-Path $localState "debug.log") $out -ErrorAction SilentlyContinue
                   Copy-Item (Join-Path $localState "*.log") $out -ErrorAction SilentlyContinue
+
+                  $workspaceFile = Join-Path $localState "WorkspacePilot\workspaces.json"
+                  if (Test-Path $workspaceFile) {
+                      Copy-Item $workspaceFile (Join-Path $out "workspaces.json") -Force
+                  }
               }
           }
 
