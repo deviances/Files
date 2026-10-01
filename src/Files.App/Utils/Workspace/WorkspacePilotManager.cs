@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.IO;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using Windows.Storage;
 
