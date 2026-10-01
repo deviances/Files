@@ -83,6 +83,12 @@ namespace Files.App.Services
 		public async Task CheckForUpdatesAsync()
 		{
 			IsUpdateAvailable = false;
+
+			// WorkspacePilot is a custom fork package and must never query the
+			// official Files sideload feed. The official lookup only contains
+			// Files and FilesPreview package identities.
+			if (PackageName.Equals("WorkspacePilot", StringComparison.OrdinalIgnoreCase))
+				return;
 			try
 			{
 				Logger?.LogInformation($"SIDELOAD: Checking for updates...");
@@ -194,6 +200,9 @@ namespace Files.App.Services
 
 		private async Task ApplyPackageUpdateAsync()
 		{
+			if (PackageName.Equals("WorkspacePilot", StringComparison.OrdinalIgnoreCase))
+				return;
+
 			if (!IsUpdateAvailable)
 				return;
 
