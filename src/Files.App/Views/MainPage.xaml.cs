@@ -139,14 +139,13 @@ namespace Files.App.Views
 			await CreateWorkspaceDirectAsync();
 		}
 
-		private async Task CreateWorkspaceDirectAsync()
+		private Task CreateWorkspaceDirectAsync()
 		{
-			AppLifecycleHelper.SaveSessionTabs();
-
 			var workspaceNumber = WorkspacePilotManager.Workspaces.Count + 1;
-			WorkspacePilotManager.CreateWorkspace($"Workspace {workspaceNumber}");
+			var workspace = WorkspacePilotManager.CreateWorkspace($"Workspace {workspaceNumber}", activate: false);
 
-			await RestartIntoActiveWorkspaceAsync();
+			App.Logger?.LogInformation($"WorkspacePilot UI: plus created {workspace.Name} ({workspace.Id})");
+			return Task.CompletedTask;
 		}
 
 		private async Task RenameActiveWorkspaceAsync()
@@ -171,7 +170,10 @@ namespace Files.App.Views
 				return;
 
 			if (WorkspacePilotManager.RenameWorkspace(active.Id, nameBox.Text.Trim()))
-				await RestartIntoActiveWorkspaceAsync();
+			{
+				WorkspaceManagerLabel.Text = $"Workspaces · {WorkspacePilotManager.ActiveWorkspace.Name}";
+				App.Logger?.LogInformation($"WorkspacePilot UI: renamed active workspace to {WorkspacePilotManager.ActiveWorkspace.Name}");
+			}
 		}
 
 		private async Task DeleteActiveWorkspaceAsync()
